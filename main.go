@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -18,8 +19,6 @@ import (
 	"github.com/Solomiam356/witness-backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
-
-	"github.com/Solomiam356/witness-backend/internal/auth"
 )
 
 func main() {
@@ -57,34 +56,31 @@ func main() {
 	r := chi.NewRouter()
 
 	corsMiddleware := cors.New(cors.Options{
-		AllowedOrigins: []string{"http://localhost:3000", "http://localhost:5173", "https://*.fly.dev"},
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		ExposedHeaders: []string{"Link"},
+		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:5173", "https://*.fly.dev"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
-		MaxAge: 300,
-
+		MaxAge:           300,
 	})
 
 	r.Use(corsMiddleware.Handler)
-
 	r.Use(middleware.Logger)
 
 	limiterManager := middleware.NewIPManager()
 
-
 	r.Route("/auth", func(r chi.Router) {
 		r.Use(middleware.RateLimiter(limiterManager))
 
-		r.Post("/signup", auth.SignUpHandler)
-		r.Post("/login", auth.LoginHandler)
-		r.Post("/refresh", auth.RefreshHandler)
+		r.Post("/signup", authHandler.SignUp)
+		r.Post("/login", authHandler.Login)
+		r.Post("/refresh", authHandler.Refresh)
 
-		r.Get("/verify-email", auth.VerifyEmailHandler)
-		r.Post("/resend-verification", auth.ResendVerificationHandler)
+		r.Get("/verify-email", authHandler.VerifyEmail)
+		r.Post("/resend-verification", authHandler.ResendVerification)
 
-		r.Post("/forgot-password", auth.ForgotPasswordHandler)
-		r.Post("/reset-password", auth.ResetPasswordHandler)
+		r.Post("/forgot-password", authHandler.ForgotPassword)
+		r.Post("/reset-password", authHandler.ResetPassword)
 
 		r.Get("/sessions", authHandler.GetMySessions)
 	})
@@ -92,7 +88,7 @@ func main() {
 	// Базовий маршрут перевірки працездатності сервера
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"status": "ok"}`))
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
 	// 2. ЗАХИЩЕНІ МАРШРУТИ (Доступні тільки авторизованим користувачам)
@@ -116,7 +112,7 @@ func main() {
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"message": "Ви успішно вийшли з системи на всіх пристроях"}`))
+			json.NewEncoder(w).Encode(map[string]string{"message": "Ви успішно вийшли з системи на всіх пристроях"})
 		})
 
 		// Маршрути для тасок (виправлено під Chi)
@@ -131,7 +127,11 @@ func main() {
 			role := r.Context().Value(middleware.UserRoleKey).(string)
 
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"message": "Доступ дозволено!", "user_id": "%s", "role": "%s"}`, userID, role)
+			json.NewEncoder(w).Encode(map[string]string{
+				"message": "Доступ дозволено!",
+				"user_id": userID,
+				"role":    role,
+			})
 		})
 
 		// Маршрути для свідчень (виправлено під Chi)
@@ -142,13 +142,12 @@ func main() {
 		r.With(middleware.RequireRole("admin", "moderator")).Delete("/testimonies/{id}", testimonyHandler.Delete)
 	})
 
-
 	// Налаштування HTTP-сервера
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"
 	}
-	
+
 	srv := &http.Server{
 		Addr:    ":" + port,
 		Handler: r,
@@ -160,7 +159,7 @@ func main() {
 
 	// Запускаємо сервер в окремому фоновому потоці (Горутині)
 	go func() {
-		fmt.Println("Сервер Witness запущено на http://localhost:8081")
+		fmt.Println("Сервер Witness запущено на http://localhost:" + port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Помилка сервера: %v", err)
 		}
@@ -180,4 +179,3 @@ func main() {
 	database.Close()
 	fmt.Println("Сервер успішно зупинено. Всі дані збережено.")
 }
-	
