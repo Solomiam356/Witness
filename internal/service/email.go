@@ -50,7 +50,7 @@ func (s *EmailService) SendVerificationEmail(toEmail, rawToken string) error {
 
 	jsonBytes, err := json.Marshal(reqBody)
 	if err != nil {
-		return fmt.Errorf("помилка мфршалізації JSON для email: %w, err")
+		return fmt.Errorf("помилка мфршалізації JSON для email: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", "http://api.resend.com/emails", bytes.NewBuffer(jsonBytes))

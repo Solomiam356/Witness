@@ -17,6 +17,7 @@ import (
 	"github.com/Solomiam356/witness-backend/internal/repository"
 	"github.com/Solomiam356/witness-backend/internal/service"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 
 	"github.com/Solomiam356/witness-backend/internal/auth"
 )
@@ -46,7 +47,7 @@ func main() {
 	authHandler := handler.NewAuthHandler(sessionService)
 
 	reportRepo := repository.NewReportRepository(database.DB)
-	_ = reportRepo
+	reportHandler := handler.NewReportHandler(reportRepo)
 
 	taskRepo := repository.NewTaskRepository(database.DB)
 	taskService := service.NewTaskService(taskRepo)
@@ -54,9 +55,23 @@ func main() {
 
 	// Ініціалізуємо роутер Chi
 	r := chi.NewRouter()
+
+	corsMiddleware := cors.New(cors.Options{
+		AllowedOrigins: []string{"http://localhost:3000", "http://localhost:5173", "https://*.fly.dev"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders: []string{"Link"},
+		AllowCredentials: true,
+		MaxAge: 300,
+
+	})
+
+	r.Use(corsMiddleware.Handler)
+
 	r.Use(middleware.Logger)
 
 	limiterManager := middleware.NewIPManager()
+
 
 	r.Route("/auth", func(r chi.Router) {
 		r.Use(middleware.RateLimiter(limiterManager))
@@ -84,6 +99,8 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.AuthMiddleware)
 		r.Use(middleware.RequireVerifiedEmail)
+
+		r.Post("/testimonies/{id}/report", reportHandler.CreateReport)
 
 		r.Post("/auth/logout", func(w http.ResponseWriter, r *http.Request) {
 			userID, ok := r.Context().Value(middleware.UserIDKey).(string)
@@ -124,6 +141,7 @@ func main() {
 
 		r.With(middleware.RequireRole("admin", "moderator")).Delete("/testimonies/{id}", testimonyHandler.Delete)
 	})
+
 
 	// Налаштування HTTP-сервера
 	port := os.Getenv("PORT")
