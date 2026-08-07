@@ -3,7 +3,7 @@ version: '3.8'
 services:
   api:
     build: .                          # збирає образ з нашого Dockerfile
-    container_name: todo-api
+    container_name: witness-api
     ports:
       - "8082:8081"                   # зовнішній порт : внутрішній порт
     depends_on:
@@ -13,20 +13,20 @@ services:
       - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=postgres
-      - DB_NAME=todo_db
+      - DB_NAME=witness_db
       - DB_SSLMODE=disable #
       - GEMINI_API_KEY= ""
     restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
-    container_name: todo-postgres
+    container_name: witness-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: todo_db
+      POSTGRES_DB: witness_db
     ports:
-      - "5432:5432"
+    - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
