@@ -21,6 +21,23 @@ import (
 	"github.com/go-chi/cors"
 )
 
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	cfg := config.Load()
 
@@ -69,77 +86,84 @@ func main() {
 
 	limiterManager := middleware.NewIPManager()
 
-	r.Route("/auth", func(r chi.Router) {
-		r.Use(middleware.RateLimiter(limiterManager))
+	// -------------------------------------------------------------
+	// ВСІ МАРШРУТИ З ПРЕФІКСОМ /api
+	// -------------------------------------------------------------
+	r.Route("/api", func(r chi.Router) {
 
-		r.Post("/signup", authHandler.SignUp)
-		r.Post("/login", authHandler.Login)
-		r.Post("/refresh", authHandler.Refresh)
-
-		r.Get("/verify-email", authHandler.VerifyEmail)
-		r.Post("/resend-verification", authHandler.ResendVerification)
-
-		r.Post("/forgot-password", authHandler.ForgotPassword)
-		r.Post("/reset-password", authHandler.ResetPassword)
-
-		r.Get("/sessions", authHandler.GetMySessions)
-	})
-
-	// Базовий маршрут перевірки працездатності сервера
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
-
-	// 2. ЗАХИЩЕНІ МАРШРУТИ (Доступні тільки авторизованим користувачам)
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.AuthMiddleware)
-		r.Use(middleware.RequireVerifiedEmail)
-
-		r.Post("/testimonies/{id}/report", reportHandler.CreateReport)
-
-		r.Post("/auth/logout", func(w http.ResponseWriter, r *http.Request) {
-			userID, ok := r.Context().Value(middleware.UserIDKey).(string)
-			if !ok {
-				http.Error(w, "Користувач не визначений", http.StatusUnauthorized)
-				return
-			}
-
-			if err := sessionRepo.RevokeAllByUserID(r.Context(), userID); err != nil {
-				http.Error(w, "Не вдалося закрити сесію: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-
+		// Публічні маршрути
+		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"message": "Ви успішно вийшли з системи на всіх пристроях"})
+			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 		})
 
-		// Маршрути для тасок (виправлено під Chi)
-		r.Post("/tasks", taskHandler.Create)
-		r.Get("/tasks", taskHandler.GetAll)
-		r.Patch("/tasks/{id}", taskHandler.UpdateStatus)
-		r.Delete("/tasks/{id}", taskHandler.Delete)
-
-		// Перевірка поточного юзера
-		r.Get("/auth/me", func(w http.ResponseWriter, r *http.Request) {
-			userID := r.Context().Value(middleware.UserIDKey).(string)
-			role := r.Context().Value(middleware.UserRoleKey).(string)
-
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]string{
-				"message": "Доступ дозволено!",
-				"user_id": userID,
-				"role":    role,
-			})
-		})
-
-		// Маршрути для свідчень (виправлено під Chi)
-		r.Post("/testimonies", testimonyHandler.Create)
-		r.Get("/testimonies", testimonyHandler.GetAll)
 		r.Get("/testimonies/feed", testimonyHandler.GetFeed)
+		r.Post("/testimonies", testimonyHandler.Create) // Винесено в публічні для тестування створення без токена
 
-		r.With(middleware.RequireRole("admin", "moderator")).Delete("/testimonies/{id}", testimonyHandler.Delete)
+		r.Route("/auth", func(r chi.Router) {
+			r.Use(middleware.RateLimiter(limiterManager))
+
+			r.Post("/signup", authHandler.SignUp)
+			r.Post("/login", authHandler.Login)
+			r.Post("/refresh", authHandler.Refresh)
+
+			r.Get("/verify-email", authHandler.VerifyEmail)
+			r.Post("/resend-verification", authHandler.ResendVerification)
+
+			r.Post("/forgot-password", authHandler.ForgotPassword)
+			r.Post("/reset-password", authHandler.ResetPassword)
+
+			r.Get("/sessions", authHandler.GetMySessions)
+		})
+
+		// 2. ЗАХИЩЕНІ МАРШРУТИ (Доступні тільки авторизованим користувачам)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.AuthMiddleware)
+			r.Use(middleware.RequireVerifiedEmail)
+
+			r.Post("/testimonies/{id}/report", reportHandler.CreateReport)
+
+			r.Post("/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+				userID, ok := r.Context().Value(middleware.UserIDKey).(string)
+				if !ok {
+					http.Error(w, "Користувач не визначений", http.StatusUnauthorized)
+					return
+				}
+
+				if err := sessionRepo.RevokeAllByUserID(r.Context(), userID); err != nil {
+					http.Error(w, "Не вдалося закрити сесію: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				json.NewEncoder(w).Encode(map[string]string{"message": "Ви успішно вийшли з системи на всіх пристроях"})
+			})
+
+			// Маршрути для тасок
+			r.Post("/tasks", taskHandler.Create)
+			r.Get("/tasks", taskHandler.GetAll)
+			r.Patch("/tasks/{id}", taskHandler.UpdateStatus)
+			r.Delete("/tasks/{id}", taskHandler.Delete)
+
+			// Перевірка поточного юзера
+			r.Get("/auth/me", func(w http.ResponseWriter, r *http.Request) {
+				userID := r.Context().Value(middleware.UserIDKey).(string)
+				role := r.Context().Value(middleware.UserRoleKey).(string)
+
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]string{
+					"message": "Доступ дозволено!",
+					"user_id": userID,
+					"role":    role,
+				})
+			})
+
+			// Маршрути для свідчень
+			r.Get("/testimonies", testimonyHandler.GetAll)
+
+			r.With(middleware.RequireRole("admin", "moderator")).Delete("/testimonies/{id}", testimonyHandler.Delete)
+		})
 	})
 
 	// Налаштування HTTP-сервера

@@ -2,9 +2,12 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/Solomiam356/witness-backend/internal/domain"
+	"github.com/lib/pq"
 )
 
 type TestimonyRepository struct {
@@ -17,15 +20,25 @@ func NewTestimonyRepository(db *pgxpool.Pool) *TestimonyRepository {
 
 func (r *TestimonyRepository) Create(ctx context.Context, t *domain.Testimony) error {
 	query := `
-		INSERT INTO testimonies (id, user_id, title, content, summary, tags, created_at, updated_at)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())
-		RETURNING id, created_at, updated_at
+		INSERT INTO testimonies (id, user_id, title, content, summary, tags, is_published, created_at, updated_at)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, false, NOW(), NOW())
+		RETURNING id, is_published, created_at, updated_at
 	`
-	return r.db.QueryRow(ctx, query, t.UserID, t.Title, t.Content, t.Summary, t.Tags).Scan(&t.ID, &t.CreatedAt, &t.UpdatedAt)
+	return r.db.QueryRow(ctx, query, t.UserID, t.Title, t.Content, t.Summary, t.Tags).Scan(&t.ID, &t.IsPublished, &t.CreatedAt, &t.UpdatedAt)
+}
+
+func (r *TestimonyRepository) UpdateModerationStatus(ctx context.Context, id string, summary string, tags pq.StringArray, isPublished bool) error {
+	query := `
+		UPDATE testimonies
+		SET summary = $1, tags = $2, is_published = $3, updated_at = NOW()
+		WHERE id = $4
+	`
+	_, err := r.db.Exec(ctx, query, summary, tags, isPublished, id)
+	return err
 }
 
 func (r *TestimonyRepository) GetAllByUserID(ctx context.Context, userID string) ([]domain.Testimony, error) {
-	query := `SELECT id, user_id, title, content, summary, tags, created_at
+	query := `SELECT id, user_id, title, content, summary, tags, is_published, created_at
 	          FROM testimonies
 	          WHERE user_id = $1
 	          ORDER BY created_at DESC`
@@ -39,16 +52,13 @@ func (r *TestimonyRepository) GetAllByUserID(ctx context.Context, userID string)
 	var list []domain.Testimony
 	for rows.Next() {
 		var t domain.Testimony
-		if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Content, &t.Summary, &t.Tags, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Content, &t.Summary, &t.Tags, &t.IsPublished, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, t)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return list, nil
+	return list, rows.Err()
 }
 
 func (r *TestimonyRepository) DeleteByID(ctx context.Context, id string, userID string) error {
@@ -60,18 +70,23 @@ func (r *TestimonyRepository) DeleteByID(ctx context.Context, id string, userID 
 	}
 
 	if result.RowsAffected() == 0 {
-		return context.DeadlineExceeded
+		return errors.New("свідчення не знайдено або користувач не має прав на видалення")
 	}
 
 	return nil
 }
 
+func (r *TestimonyRepository) HardDelete(ctx context.Context, id string) error {
+	query := `DELETE FROM testimonies WHERE id = $1`
+	_, err := r.db.Exec(ctx, query, id)
+	return err
+}
 func (r *TestimonyRepository) GetFeed(ctx context.Context, cursor string, limit int, search string, filterUserID string) ([]domain.Testimony, error) {
 	if limit <= 0 {
 		limit = 10
 	}
 
-	query := `SELECT id, user_id, title, content, summary, tags, created_at FROM testimonies WHERE 1=1`
+	query := `SELECT id, user_id, title, content, summary, tags, is_published, created_at FROM testimonies WHERE is_published = true`
 	var args []interface{}
 	argCounter := 1
 
@@ -105,15 +120,11 @@ func (r *TestimonyRepository) GetFeed(ctx context.Context, cursor string, limit 
 	var list []domain.Testimony
 	for rows.Next() {
 		var t domain.Testimony
-		if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Content, &t.Summary, &t.Tags, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Content, &t.Summary, &t.Tags, &t.IsPublished, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, t)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return list, nil
+	return list, rows.Err()
 }

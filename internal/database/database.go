@@ -47,6 +47,18 @@ func InitSchema() error {
 	}
 
 	schema := `
+	-- Очищення застарілих таблиць для перестворення схеми під час розробки
+	-- УВАГА: На продакшені замість DROP використовуються SQL-міграції!
+	DROP TABLE IF EXISTS reports CASCADE;
+	DROP TABLE IF EXISTS password_reset_tokens CASCADE;
+	DROP TABLE IF EXISTS email_verification_tokens CASCADE;
+	DROP TABLE IF EXISTS daily_reflections CASCADE;
+	DROP TABLE IF EXISTS saved_testimonies CASCADE;
+	DROP TABLE IF EXISTS testimonies CASCADE;
+	DROP TABLE IF EXISTS tasks CASCADE;
+	DROP TABLE IF EXISTS sessions CASCADE;
+	DROP TABLE IF EXISTS users CASCADE;
+
 	CREATE TABLE IF NOT EXISTS users (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		email VARCHAR(255) UNIQUE NOT NULL,
@@ -70,9 +82,6 @@ func InitSchema() error {
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 	);
 
-	-- Тимчасово зносимо стару версію тасок, щоб оновити структуру
-	DROP TABLE IF EXISTS tasks;
-
 	CREATE TABLE IF NOT EXISTS tasks (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -87,7 +96,7 @@ func InitSchema() error {
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		title VARCHAR(255),
 		content TEXT NOT NULL,
-		summary TEXT, 
+		summary TEXT,
 		tags TEXT[],
 		category VARCHAR(50) DEFAULT 'general',
 		prayer_count INT DEFAULT 0,
@@ -127,12 +136,6 @@ func InitSchema() error {
 
 	CREATE INDEX IF NOT EXISTS idx_verification_token_hash ON email_verification_tokens(token_hash);
 
-	-- Індекси для швидкого пошуку та оптимізації зв'язків (Foreign Keys)
-	CREATE INDEX IF NOT EXISTS idx_testimonies_user_id ON testimonies (user_id);
-	CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id);
-	CREATE INDEX IF NOT EXISTS idx_sessions_refresh_hash ON sessions (refresh_token_hash);
-	CREATE INDEX IF NOT EXISTS idx_saved_testimonies_user_id ON saved_testimonies (user_id);
-
 	CREATE TABLE IF NOT EXISTS password_reset_tokens (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -140,6 +143,22 @@ func InitSchema() error {
 		expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS reports (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		testimony_id UUID NOT NULL REFERENCES testimonies(id) ON DELETE CASCADE,
+		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		reason TEXT NOT NULL,
+		status VARCHAR(50) DEFAULT 'pending',
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_testimonies_user_id ON testimonies (user_id);
+	CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id);
+	CREATE INDEX IF NOT EXISTS idx_sessions_refresh_hash ON sessions (refresh_token_hash);
+	CREATE INDEX IF NOT EXISTS idx_saved_testimonies_user_id ON saved_testimonies (user_id);
+	CREATE INDEX IF NOT EXISTS idx_reports_testimony_id ON reports (testimony_id);
+	CREATE INDEX IF NOT EXISTS idx_reports_user_id ON reports (user_id);
 	`
 
 	_, err := DB.Exec(context.Background(), schema)

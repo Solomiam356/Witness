@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net"
 	"net/http"
 	"sync"
 
@@ -22,7 +23,7 @@ func (i *IPManager) GetLimiter(ip string) *rate.Limiter {
 
 	limiter, exists := i.ips[ip]
 	if !exists {
-		limiter = rate.NewLimiter(1,3)
+		limiter = rate.NewLimiter(1, 3)
 		i.ips[ip] = limiter
 	}
 	return limiter
@@ -31,7 +32,10 @@ func (i *IPManager) GetLimiter(ip string) *rate.Limiter {
 func RateLimiter(manager *IPManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ip := r.RemoteAddr
+			ip, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				ip = r.RemoteAddr
+			}
 			limiter := manager.GetLimiter(ip)
 
 			if !limiter.Allow() {

@@ -12,6 +12,7 @@ type Testimony struct {
 	Content string `json:"content"`
 	Summary string `json:"summary"`
 	Tags pq.StringArray `gorm:"type:text[]" json:"tags"`
+	IsPublished bool `json:"is_published"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

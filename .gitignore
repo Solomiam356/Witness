@@ -8,6 +8,7 @@
 *.dylib
 app
 witness-backend
+*.node_modules
 
 # Локальні файли редакторів та ОС
 .DS_Store
