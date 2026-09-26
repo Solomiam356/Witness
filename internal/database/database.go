@@ -53,6 +53,7 @@ func InitSchema() error {
 	DROP TABLE IF EXISTS password_reset_tokens CASCADE;
 	DROP TABLE IF EXISTS email_verification_tokens CASCADE;
 	DROP TABLE IF EXISTS daily_reflections CASCADE;
+	DROP TABLE IF EXISTS daily_verses CASCADE;
 	DROP TABLE IF EXISTS saved_testimonies CASCADE;
 	DROP TABLE IF EXISTS testimonies CASCADE;
 	DROP TABLE IF EXISTS tasks CASCADE;
@@ -99,6 +100,10 @@ func InitSchema() error {
 		summary TEXT,
 		tags TEXT[],
 		category VARCHAR(50) DEFAULT 'general',
+		language VARCHAR(10) DEFAULT 'uk',
+		title_en VARCHAR(255),
+		content_en TEXT,
+		summary_en TEXT,
 		prayer_count INT DEFAULT 0,
 		is_published BOOLEAN DEFAULT false,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -115,13 +120,25 @@ func InitSchema() error {
 		UNIQUE(user_id, testimony_id)
 	);
 
+	CREATE TABLE IF NOT EXISTS daily_verses (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		verse_ref VARCHAR(100) NOT NULL,
+	    verse_text TEXT NOT NULL,
+		date DATE UNIQUE NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+	);
+
+
 	CREATE TABLE IF NOT EXISTS daily_reflections (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		verse_ref VARCHAR(100) NOT NULL,
+		verse_text TEXT,
 		morning_note TEXT,
 		evening_note TEXT,
 		date DATE NOT NULL,
+		created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+		updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 		UNIQUE (user_id, date)
 	);
 
@@ -159,6 +176,8 @@ func InitSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_saved_testimonies_user_id ON saved_testimonies (user_id);
 	CREATE INDEX IF NOT EXISTS idx_reports_testimony_id ON reports (testimony_id);
 	CREATE INDEX IF NOT EXISTS idx_reports_user_id ON reports (user_id);
+	CREATE INDEX IF NOT EXISTS idx_daily_verses_date ON daily_verses (date);
+	CREATE INDEX IF NOT EXISTS idx_daily_reflections_user_id ON daily_reflections (user_id, date);
 	`
 
 	_, err := DB.Exec(context.Background(), schema)
