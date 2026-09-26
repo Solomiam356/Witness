@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/lib/pq"
 	"github.com/Solomiam356/witness-backend/internal/domain"
 	"github.com/Solomiam356/witness-backend/internal/repository"
+	"github.com/lib/pq"
 )
 
 type TestimonyService struct {
@@ -31,15 +32,13 @@ func (s *TestimonyService) CreateTestimony(ctx context.Context, t *domain.Testim
 		return errors.New("текст свідчення не може бути порожнім")
 	}
 
-	// 1. Зберігаємо свідчення в БД з is_published = false
 	err := s.repo.Create(ctx, t)
 	if err != nil {
 		return fmt.Errorf("помилка збереження свідчення: %w", err)
 	}
 
-	// 2. Асинхронна модерація та генерація тегів у фоновій горутині
 	go func(id string, content string) {
-		bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		bgCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
 
 		analysis, err := s.aiSvc.AnalyzeAndSummarize(bgCtx, content)
@@ -54,13 +53,44 @@ func (s *TestimonyService) CreateTestimony(ctx context.Context, t *domain.Testim
 			return
 		}
 
-		// Публікуємо свідчення (is_published = true) та оновлюємо summary і теги
+		var (
+			contentEN string
+			summaryEN string
+			wg        sync.WaitGroup
+		)
+
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			tr, err := s.aiSvc.TranslateToEnglish(bgCtx, content)
+			if err != nil {
+				log.Printf("[AI TRANSLATION ERROR] Не вдалося перекласти content свідчення %s: %v", id, err)
+				contentEN = content
+				return
+			}
+			contentEN = tr
+		}()
+
+		go func() {
+			defer wg.Done()
+			tr, err := s.aiSvc.TranslateToEnglish(bgCtx, analysis.Summary)
+			if err != nil {
+				log.Printf("[AI TRANSLATION ERROR] Не вдалося перекласти summary свідчення %s: %v", id, err)
+				summaryEN = analysis.Summary
+				return
+			}
+			summaryEN = tr
+		}()
+
+		wg.Wait()
+
 		tags := pq.StringArray(analysis.Tags)
-		err = s.repo.UpdateModerationStatus(bgCtx, id, analysis.Summary, tags, true)
+		err = s.repo.UpdateModerationStatus(bgCtx, id, analysis.Summary, tags, contentEN, summaryEN, true)
 		if err != nil {
 			log.Printf("[AI MODERATION ERROR] Помилка публікації свідчення %s: %v", id, err)
 		} else {
-			log.Printf("[AI MODERATION SUCCESS] Свідчення %s успішно перевірено та опубліковано", id)
+			log.Printf("[AI MODERATION SUCCESS] Свідчення %s успішно перевірено, перекладено та опубліковано", id)
 		}
 	}(t.ID, t.Content)
 

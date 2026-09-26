@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/Solomiam356/witness-backend/internal/domain"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lib/pq"
 )
 
@@ -27,21 +27,34 @@ func (r *TestimonyRepository) Create(ctx context.Context, t *domain.Testimony) e
 	return r.db.QueryRow(ctx, query, t.UserID, t.Title, t.Content, t.Summary, t.Tags).Scan(&t.ID, &t.IsPublished, &t.CreatedAt, &t.UpdatedAt)
 }
 
-func (r *TestimonyRepository) UpdateModerationStatus(ctx context.Context, id string, summary string, tags pq.StringArray, isPublished bool) error {
+func (r *TestimonyRepository) UpdateModerationStatus(
+	ctx context.Context,
+	id string,
+	summary string,
+	tags pq.StringArray,
+	contentEN string,
+	summaryEN string,
+	isPublished bool,
+) error {
 	query := `
 		UPDATE testimonies
-		SET summary = $1, tags = $2, is_published = $3, updated_at = NOW()
-		WHERE id = $4
+		SET summary = $1,
+		    tags = $2,
+		    content_en = $3,
+		    summary_en = $4,
+		    is_published = $5,
+		    updated_at = NOW()
+		WHERE id = $6
 	`
-	_, err := r.db.Exec(ctx, query, summary, tags, isPublished, id)
+	_, err := r.db.Exec(ctx, query, summary, tags, contentEN, summaryEN, isPublished, id)
 	return err
 }
 
 func (r *TestimonyRepository) GetAllByUserID(ctx context.Context, userID string) ([]domain.Testimony, error) {
 	query := `SELECT id, user_id, title, content, summary, tags, is_published, created_at
-	          FROM testimonies
-	          WHERE user_id = $1
-	          ORDER BY created_at DESC`
+			  FROM testimonies
+			  WHERE user_id = $1
+			  ORDER BY created_at DESC`
 
 	rows, err := r.db.Query(ctx, query, userID)
 	if err != nil {
@@ -81,6 +94,7 @@ func (r *TestimonyRepository) HardDelete(ctx context.Context, id string) error {
 	_, err := r.db.Exec(ctx, query, id)
 	return err
 }
+
 func (r *TestimonyRepository) GetFeed(ctx context.Context, cursor string, limit int, search string, filterUserID string) ([]domain.Testimony, error) {
 	if limit <= 0 {
 		limit = 10
