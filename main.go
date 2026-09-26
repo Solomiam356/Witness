@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Solomiam356/witness-backend/internal/config"
+	"github.com/Solomiam356/witness-backend/internal/cron"
 	"github.com/Solomiam356/witness-backend/internal/database"
 	"github.com/Solomiam356/witness-backend/internal/handler"
 	"github.com/Solomiam356/witness-backend/internal/middleware"
@@ -20,23 +21,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 )
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
 
 func main() {
 	cfg := config.Load()
@@ -68,6 +52,14 @@ func main() {
 	taskRepo := repository.NewTaskRepository(database.DB)
 	taskService := service.NewTaskService(taskRepo)
 	taskHandler := handler.NewTaskHandler(taskService)
+
+	reflectionRepo := repository.NewReflectionRepository(database.DB)
+	reflectionHandler := handler.NewReflectionHandler(reflectionRepo)
+
+	// 2. Ініціалізація та запуск Cron-планувальника
+	scheduler := cron.NewScheduler(database.DB, aiSvc)
+	scheduler.Start()
+	defer scheduler.Stop() // Зупиняє Cron при завершенні роботи сервера
 
 	// Ініціалізуємо роутер Chi
 	r := chi.NewRouter()
@@ -163,6 +155,11 @@ func main() {
 			r.Get("/testimonies", testimonyHandler.GetAll)
 
 			r.With(middleware.RequireRole("admin", "moderator")).Delete("/testimonies/{id}", testimonyHandler.Delete)
+
+			// Маршрути для щоденних роздумів
+			r.Get("/reflections/today", reflectionHandler.GetToday)
+			r.Post("/reflections/morning", reflectionHandler.SaveMorning)
+			r.Post("/reflections/evening", reflectionHandler.SaveEvening)
 		})
 	})
 

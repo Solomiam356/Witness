@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log" 
+	"log"
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
@@ -32,9 +32,8 @@ func (s *AIService) AnalyzeAndSummarize(ctx context.Context, text string) (*AIAn
 	}
 	defer client.Close()
 
-	
-	model := client.GenerativeModel("gemini-flash-latest")
 
+	model := client.GenerativeModel("gemini-flash-latest")
 	model.ResponseMIMEType = "application/json"
 
 	prompt := fmt.Sprintf(`Проаналізуй наступний текст для платформи духовних свідчень "Witness".
@@ -48,12 +47,9 @@ func (s *AIService) AnalyzeAndSummarize(ctx context.Context, text string) (*AIAn
 	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
 		errStr := err.Error()
-		
-		// 1. Виведемо реальну помилку в консоль твого сервера, щоб ти бачила, що ТАКСПРАВДІ каже Google
-		log.Printf("🔴 [AIService] Помилка від Gemini API: %s\n", errStr)
-		
-		// 2. Строга перевірка: реагуємо виключно на код 429 або чітке повідомлення про вичерпану квоту
-		// Ми прибрали загальне "limit", щоб воно не перетикало з назвами моделей
+
+		log.Printf("🔴 [AIService] Помилка від Gemini API під час аналізу: %s\n", errStr)
+
 		if strings.Contains(errStr, "429") || strings.Contains(strings.ToLower(errStr), "quota exceeded") {
 			log.Println("⚠️ [AIService] Спрацював реальний Rate Limit (429). Повертаємо заглушку...")
 			return &AIAnalysisResult{
@@ -62,10 +58,8 @@ func (s *AIService) AnalyzeAndSummarize(ctx context.Context, text string) (*AIAn
 				Summary: "This is a temporary fallback summary because Google Gemini API rate limit (429) was reached. Your backend flow is fully working!",
 			}, nil
 		}
-		
-		// Будь-яку іншу помилку ми показуємо чесно, щоб знати, де баг
 		return nil, fmt.Errorf("помилка аналізу вмісту: %w", err)
-	
+
 	}
 
 	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 {
@@ -84,4 +78,52 @@ func (s *AIService) AnalyzeAndSummarize(ctx context.Context, text string) (*AIAn
 	}
 
 	return &result, nil
-}	
+}
+
+func (s *AIService) TranslateToEnglish(ctx context.Context, text string) (string, error) {
+	if strings.TrimSpace(text) == "" {
+		return "", nil
+	}
+
+	client, err := genai.NewClient(ctx, option.WithAPIKey(s.apiKey))
+	if err != nil {
+		return "", fmt.Errorf("не вдалося створити клієнт Gemini: %w", err)
+	}
+	defer client.Close()
+
+	model := client.GenerativeModel("gemini-flash-latest")
+
+	prompt := fmt.Sprintf(`Переклади наступне духовне свідчення англійською мовою для платформи "Witness".
+Збережи щирий, емоційний та автентичний тон автора.
+Вимоги:
+1. Поверни ВИКЛЮЧНО текст перекладу.
+2. Не додавай вступних слів, коментарів чи пояснень (наприклад, НЕ пиши "Here is the translation:").
+3. Не обгортай текст у подвійні лапки.
+
+Текст для перекладу: %s`, text)
+
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		errStr := err.Error()
+		log.Printf("🔴 [AIService] Помилка перекладу від Gemini API: %s\n", errStr)
+
+		if strings.Contains(errStr, "429") || strings.Contains(strings.ToLower(errStr), "quota exceeded") {
+			log.Println("⚠️ [AIService] Rate Limit (429) під час перекладу. Повертаємо оригінал...")
+			return text, nil
+		}
+
+		return "", fmt.Errorf("помилка виконання перекладу: %w", err)
+	}
+
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil || len(resp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("отримано порожню відповідь від Gemini під час перекладу")
+	}
+
+	var sb strings.Builder
+	for _, part := range resp.Candidates[0].Content.Parts {
+		sb.WriteString(fmt.Sprintf("%v", part))
+	}
+
+	translatedText := strings.TrimSpace(sb.String())
+	return translatedText, nil
+}
