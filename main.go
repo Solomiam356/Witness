@@ -20,6 +20,7 @@ import (
 	"github.com/Solomiam356/witness-backend/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"github.com/Solomiam356/witness-backend/internal/websocket"
 )
 
 func main() {
@@ -61,6 +62,9 @@ func main() {
 	scheduler.Start()
 	defer scheduler.Stop() // Зупиняє Cron при завершенні роботи сервера
 
+	wsHub := websocket.NewHub()
+	go wsHub.Run()
+
 	// Ініціалізуємо роутер Chi
 	r := chi.NewRouter()
 
@@ -87,6 +91,10 @@ func main() {
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		})
+
+		r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
+			websocket.ServeWs(wsHub, w, r)
 		})
 
 		r.Get("/testimonies/feed", testimonyHandler.GetFeed)

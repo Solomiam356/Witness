@@ -12,6 +12,7 @@ require (
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.12.3
+	github.com/robfig/cron/v3 v3.0.1
 	golang.org/x/crypto v0.52.0
 	golang.org/x/time v0.15.0
 	google.golang.org/api v0.186.0

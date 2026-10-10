@@ -102,7 +102,7 @@ func (s *TestimonyService) GetTestimoniesByUserID(ctx context.Context, userID st
 }
 
 func (s *TestimonyService) DeleteTestimony(ctx context.Context, id string, userID string) error {
-	return s.repo.DeleteByID(ctx, id, userID)
+	return s.repo.Archive(ctx, id, userID)
 }
 
 type PaginatedTestimonies struct {

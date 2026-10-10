@@ -81,13 +81,14 @@ func (c *Client) readPump() {
 	})
 
 	for {
-		_, _, err := c.Conn.ReadMessage()
+		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
 			}
 			break
 		}
+		c.Hub.Broadcast <- message
 	}
 }
 
@@ -130,4 +131,10 @@ func (c *Client) writePump() {
 			}
 		}
 	}
+}
+
+type WSMessage struct {
+	Type string `json:"type"`
+	Content string `json:"content"`
+	SenderID string `json:"sender_id"`
 }

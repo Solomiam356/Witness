@@ -74,8 +74,8 @@ func (r *TestimonyRepository) GetAllByUserID(ctx context.Context, userID string)
 	return list, rows.Err()
 }
 
-func (r *TestimonyRepository) DeleteByID(ctx context.Context, id string, userID string) error {
-	query := `DELETE FROM testimonies WHERE id = $1 AND user_id = $2`
+func (r *TestimonyRepository) Archive(ctx context.Context, id string, userID string) error {
+	query := `UPDATE testimonies SET is_archived = true, updated_at = NOW() WHERE id = $1 AND user_id = $2`
 
 	result, err := r.db.Exec(ctx, query, id, userID)
 	if err != nil {
@@ -83,7 +83,7 @@ func (r *TestimonyRepository) DeleteByID(ctx context.Context, id string, userID 
 	}
 
 	if result.RowsAffected() == 0 {
-		return errors.New("свідчення не знайдено або користувач не має прав на видалення")
+		return errors.New("свідчення не знайдено або користувач не має прав")
 	}
 
 	return nil
@@ -100,7 +100,7 @@ func (r *TestimonyRepository) GetFeed(ctx context.Context, cursor string, limit 
 		limit = 10
 	}
 
-	query := `SELECT id, user_id, title, content, summary, tags, is_published, created_at FROM testimonies WHERE is_published = true`
+	query := `SELECT id, user_id, title, content, summary, tags, is_published, created_at FROM testimonies WHERE is_published = true AND is_archived = false`
 	var args []interface{}
 	argCounter := 1
 
