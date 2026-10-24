@@ -1,0 +1,11 @@
+﻿DROP TABLE IF EXISTS reports;
+DROP TABLE IF EXISTS password_reset_tokens;
+DROP TABLE IF EXISTS email_verification_tokens;
+DROP TABLE IF EXISTS daily_reflections;
+DROP TABLE IF EXISTS daily_verses;
+DROP TABLE IF EXISTS saved_testimonies;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS testimonies;
+DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS users;

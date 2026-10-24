@@ -30,12 +30,6 @@ func main() {
 	if err := database.Connect(cfg); err != nil {
 		log.Fatalf("Не вдалося підключитися до БД: %v", err)
 	}
-
-	// Запускаємо схему бази даних Witness V2.1
-	if err := database.InitSchema(); err != nil {
-		log.Fatalf("Не вдалося створити схему даних: %v", err)
-	}
-
 	// 1. Ініціалізуємо шари архітектури (Dependency Injection)
 	testimonyRepo := repository.NewTestimonyRepository(database.DB)
 	aiSvc := service.NewAIService(cfg.GeminiAPIKey)
